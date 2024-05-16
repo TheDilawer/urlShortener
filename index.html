@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>URL Shortener Test</title>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script>
+        $(document).ready(function() {
+            const socket = new WebSocket('ws://localhost:3000');
+            let sessionId = getCookie('sessionId'); // Retrieve session ID from cookie
+
+            // Handle WebSocket errors
+            socket.onerror = function(error) {
+                console.error('WebSocket error:', error);
+                // Handle error (e.g., display message to the user)
+            };
+
+            socket.onopen = function(event) {
+                console.log('WebSocket connection established');
+                if (!sessionId) {
+                    // If session ID cookie is not present, request a new session ID from the server
+                    socket.send(JSON.stringify({ type: 'getSessionId' }));
+                } else {
+                    // If session ID exists, send it to the server
+                    socket.send(JSON.stringify({ type: 'sessionId', data: sessionId }));
+                }
+            };
+
+            socket.onmessage = function(event) {
+                const data = JSON.parse(event.data);
+                if (data.type === 'sessionId') {
+                    // Set session ID as a cookie
+                    sessionId = data.data;
+                    document.cookie = `sessionId=${sessionId}; path=/`;
+                } else if (data.type === 'shortenedUrl') {
+                    $('#shortenedUrl').text(data.data);
+                }
+            };
+
+            $('#urlForm').submit(function(event) {
+                event.preventDefault();
+
+                const url = $('#urlInput').val();
+
+                if (!sessionId) {
+                    console.error('Session ID not found in cookie');
+                    return;
+                }
+
+                $.ajax({
+                    type: 'POST',
+                    url: 'http://localhost:3000/url',
+                    contentType: 'application/json',
+                    data: JSON.stringify({ url, sessionId }), // Send session ID along with URL
+                    success: function(response) {
+                        console.log('URL submitted successfully');
+                    },
+                    error: function(xhr, status, error) {
+                        console.error('Error:', error);
+                    }
+                });
+            });
+
+            $('#acknowledgeButton').click(function() {
+                const acknowledgeMessage = JSON.stringify({ type: 'acknowledge' });
+                socket.send(acknowledgeMessage);
+                console.log('Acknowledgment sent to server');
+            });
+
+            // Function to retrieve cookie value by name
+            function getCookie(name) {
+                const cookies = document.cookie.split(';');
+                for (const element of cookies) {
+                    const cookie = element.trim();
+                    if (cookie.startsWith(name + '=')) {
+                        return cookie.substring(name.length + 1);
+                    }
+                }
+                return null;
+            }
+        });
+
+    </script>
+</head>
+<body>
+<h1>URL Shortener Test</h1>
+<form id="urlForm">
+    <label for="urlInput">Enter URL:</label>
+    <input type="text" id="urlInput" name="urlInput">
+    <button type="submit">Shorten URL</button>
+</form>
+<p>Shortened URL: <span id="shortenedUrl"></span></p>
+</body>
+</html>
